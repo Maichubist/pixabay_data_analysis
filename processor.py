@@ -9,13 +9,29 @@ from extractor import PixabayAPI, ClientSessionManager
 from logging_config import logger
 from db_interaction import db
 
+##Uncomment while first use
 # nltk.download('wordnet')
 # nltk.download('omw-1.4')
 
 class Processor:
+    """
+    A class for processing image data from Pixabay API and handling data transformations.
+    """
 
     @classmethod
     async def get_dataset(cls, session, colors_list, total_required, api):
+        """
+        Asynchronously gather and process a dataset of images based on color proportions.
+
+        Args:
+            session (ClientSession): The aiohttp session to use for HTTP requests.
+            colors_list (list): List of colors to gather images for.
+            total_required (int): Total number of images required.
+            api (PixabayAPI): The Pixabay API client instance.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the processed image data.
+        """
         color_data, total = await api.gather_color_data(session, colors_list)
         color_proportions = cls.calculate_proportional_images(color_data, total, total_required)
         images_data = await api.collect_images(session, color_proportions)
@@ -31,6 +47,18 @@ class Processor:
 
     @classmethod
     async def remove_duplicates(cls, api, session, df, prop):
+        """
+        Remove duplicates from the DataFrame based on image IDs and adjust counts per color.
+
+        Args:
+            api (PixabayAPI): The Pixabay API client instance.
+            session (ClientSession): The aiohttp session to use for HTTP requests.
+            df (pd.DataFrame): DataFrame containing image data.
+            prop (dict): Dictionary containing the target number of images per color.
+
+        Returns:
+            pd.DataFrame: The DataFrame after removing duplicates and adjusting the counts.
+        """
         df.drop_duplicates(subset='id', inplace=True)
         value_counts = df['color'].value_counts()
         for color, planned_number in prop.items():
@@ -49,27 +77,51 @@ class Processor:
 
     @classmethod
     def calculate_proportional_images(cls, color_data, total, total_images):
+        """
+        Calculate the proportional amount of images needed per color based on total images required.
+
+        Args:
+            color_data (dict): Dictionary containing color data with total counts.
+            total (int): Total number of images across all colors.
+            total_images (int): Total number of images required.
+
+        Returns:
+            dict: A dictionary mapping each color to the proportional number of images required.
+        """
         proportions = {color: count / total for color, count in color_data.items()}
         logger.info(f'Got proportions {proportions}')
         return {color: round(proportion * total_images) for color, proportion in proportions.items()}
     
     @classmethod
     def lemmatize_tags(cls, df, column_name):
+        """
+        Lemmatize the tags in the DataFrame to unify similar words to their base form.
+
+        Args:
+            df (pd.DataFrame): The DataFrame containing image tags.
+            column_name (str): The column name in the DataFrame that contains tags.
+
+        Returns:
+            pd.DataFrame: The DataFrame with lemmatized tags.
+        """
         lemmatizer = WordNetLemmatizer()
         df[column_name] = df[column_name].apply(lambda x: ' '.join([lemmatizer.lemmatize(word) for word in word_tokenize(x)]))
         return df
 
 
 async def main():
+    """
+    Main asynchronous function to gather and process image data and upload to a database.
+    """
     try:
-        api = PixabayAPI('43468911-77192db35376a6bf1c3cd384e')
+        api = PixabayAPI('your_api_key_here')
         processor = Processor()
         colors_list = ["grayscale", "transparent", "red", "orange", "yellow", "green", "turquoise", "blue", "lilac", "pink", "white", "gray", "black", "brown"]
         async with ClientSessionManager() as session:
             logger.info('Collecting and processing started')
             final_data = await processor.get_dataset(session, colors_list, 4000, api)
             logger.info('Dataset created, load to DB started')
-            db.load_data(final_data)
+            db.load_data_to_db(final_data)
             logger.info('Load to DB finished')
 
     except Exception as e:

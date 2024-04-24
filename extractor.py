@@ -7,18 +7,30 @@ from logging_config import logger
 class ClientSessionManager:
     """Manage the asynchronous HTTP client session."""
     async def __aenter__(self):
+        """Start an asynchronous context manager, initializing the session."""
         self.session = aiohttp.ClientSession()
         return self.session
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Exit the asynchronous context manager, closing the session."""
         await self.session.close()
 
 class PixabayAPI:
+    """A client for fetching image data from the Pixabay API."""
     def __init__(self, key):
         self.api_key = key
         self.base_url = 'https://pixabay.com/api/'
     
     async def fetch(self, session, params):
+        """Asynchronously fetch data from Pixabay API based on the given parameters.
+        
+        Args:
+        session (aiohttp.ClientSession): The session used to make HTTP requests.
+        params (dict): The parameters for the API request.
+        
+        Returns:
+        dict or None: The JSON response parsed into a dictionary if the request is successful, otherwise None.
+        """
         url = self.base_url
         try:
             async with session.get(url, params=params) as response:
@@ -32,6 +44,15 @@ class PixabayAPI:
             return None
 
     async def gather_color_data(self, session, colors):
+        """Gather color-specific image data from Pixabay.
+        
+        Args:
+        session (aiohttp.ClientSession): The session to use for requests.
+        colors (list): A list of color strings to gather data for.
+        
+        Returns:
+        tuple: A tuple containing a dictionary of color data and the total count of images across all colors.
+        """
         color_data = {}
         tasks = []
         total = 0
@@ -49,6 +70,17 @@ class PixabayAPI:
         return color_data, total
     
     async def fetch_color_images(self, session, color, total_required, attempts=0):
+        """Fetch images of a specific color until the required number is met, adapting strategy based on attempts.
+        
+        Args:
+        session (aiohttp.ClientSession): The session to use for requests.
+        color (str): The color filter for the images.
+        total_required (int): The total number of unique images required.
+        attempts (int): The number of attempts made to fetch the images (used internally to adapt request parameters).
+        
+        Returns:
+        list: A list of unique images that match the color criteria.
+        """
         collected_images = []
         unique_ids = set()
         max_attempts = 9
@@ -87,6 +119,15 @@ class PixabayAPI:
         return collected_images
     
     async def collect_images(self, session, color_proportions):
+        """Collect images based on specified color proportions asynchronously.
+        
+        Args:
+        session (aiohttp.ClientSession): The session to use for requests.
+        color_proportions (dict): A dictionary mapping colors to the proportion of images required for each.
+        
+        Returns:
+        list: A list of gathered tasks representing the image fetching operations.
+        """
         tasks = []
         for color, proportion in color_proportions.items():
             task = asyncio.create_task(self.fetch_color_images(session, color, proportion))

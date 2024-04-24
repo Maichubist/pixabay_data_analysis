@@ -10,10 +10,23 @@ from db.database import Base, engine
 Base.metadata.create_all(engine)
 
 class DB:
+    """
+    A class responsible for interacting with the database to load and retrieve image data.
+    """
     def __init__(self):
         self.db = SessionLocal()
 
-    def load_data(self, df):
+    def load_data_to_db(self, df):
+        """
+        Load data from a DataFrame into the database using structured ORM mappings.
+
+        Args:
+            df (pd.DataFrame): The DataFrame containing image and user data to be loaded.
+
+        Raises:
+            ValueError: If any row in the DataFrame does not contain exactly three tags.
+            Exception: Reraises any exception that occurs during the database interaction, after rolling back changes.
+        """
         try:
             for index, row in df.iterrows():
                 tags = [tag.strip() for tag in row['tags'].split(',')]
@@ -63,6 +76,12 @@ class DB:
             self.db.close()
 
     def load_data_into_df(self):
+        """
+        Retrieve all data from the database and convert it into a pandas DataFrame.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing all the image, user, and tag data from the database.
+        """
         self.db = SessionLocal()
         try:
             query = self.db.query(Users, ImageTypes, ImageFacts, Tags).\
@@ -70,17 +89,16 @@ class DB:
                 join(ImageTypes, ImageFacts.type_id == ImageTypes.type_id).\
                 join(Tags, Tags.tag_id.in_([ImageFacts.tag1_id, ImageFacts.tag2_id, ImageFacts.tag3_id]))
 
-            # Group the tags by image fact
             from collections import defaultdict
             grouped_tags = defaultdict(list)
             for user, image_type, image_fact, tag in query:
                 grouped_tags[image_fact.id].append(tag)
 
             data = []
-            processed_image_facts = set()  # Keep track of processed image facts to avoid duplication
+            processed_image_facts = set() 
             for user, image_type, image_fact, _ in query:
                 if image_fact.id not in processed_image_facts:
-                    # Combine the tags for each image fact into a single string
+
                     tag_str = ", ".join([tag.tag for tag in grouped_tags[image_fact.id]])
                     data.append({
                         'user': user.user,
